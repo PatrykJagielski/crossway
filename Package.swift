@@ -5,6 +5,6 @@ let package = Package(
     name: "Crossway",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "Crossway", path: "Sources/Crossway")
+        .executableTarget(name: "Crossway", path: "Sources/Crossway", exclude: ["Resources"])
     ]
 )

@@ -93,6 +93,32 @@ enum CLI {
                 print("Błąd: \(error.localizedDescription)"); return 1
             }
 
+        case "set":
+            // set <bottle> graphics=dxvk|automatic windows=win10 retina=on hud=on avx=on sync=esync
+            guard args.count > 2, let bottle = bottles.bottles.first(where: { $0.name == args[1] || $0.id.uuidString == args[1] }) else {
+                print("Użycie: set <butelka> graphics=dxvk|automatic windows=win10|win11 retina=on|off hud=on|off avx=on|off sync=none|esync|msync")
+                return 64
+            }
+            var updated = bottle
+            for pair in args.dropFirst(2) {
+                let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                guard kv.count == 2 else { continue }
+                let on = ["on", "1", "true", "yes", "tak"].contains(kv[1].lowercased())
+                switch kv[0] {
+                case "graphics": updated.settings.graphics = GraphicsBackend(rawValue: kv[1]) ?? updated.settings.graphics
+                case "windows": updated.settings.windowsVersion = WindowsVersion(rawValue: kv[1]) ?? updated.settings.windowsVersion
+                case "sync": updated.settings.sync = SyncMode(rawValue: kv[1]) ?? updated.settings.sync
+                case "retina": updated.settings.retinaMode = on
+                case "hud": updated.settings.metalHUD = on
+                case "avx": updated.settings.advertiseAVX = on
+                default: print("Nieznane ustawienie: \(kv[0])")
+                }
+            }
+            await bottles.update(updated, previous: bottle)
+            if let error = bottles.lastError { print("Błąd: \(error)"); return 1 }
+            print("Zapisano ustawienia butelki \(updated.name)")
+            return 0
+
         case "snapshot":
             return await Snapshot.render(to: args.count > 1 ? args[1] : "snapshot.png", view: args.count > 2 ? args[2] : "programs")
 

@@ -38,9 +38,10 @@ final class WineRunner: ObservableObject {
 
     /// Launches a Windows program (exe/msi/lnk/bat) without waiting for it.
     @discardableResult
-    func launch(file url: URL, arguments: String = "", name: String? = nil, in bottle: Bottle, runtime: WineRuntime) throws -> RunningProcess {
+    func launch(file original: URL, arguments originalArguments: String = "", name: String? = nil, in bottle: Bottle, runtime: WineRuntime) throws -> RunningProcess {
+        let (url, arguments) = SteamFix.prepare(file: original, arguments: originalArguments, in: bottle)
         let args = WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(arguments))
-        let label = name ?? url.deletingPathExtension().lastPathComponent
+        let label = name ?? original.deletingPathExtension().lastPathComponent
         return try start(arguments: args, name: label, workingDirectory: url.deletingLastPathComponent(), bottle: bottle, runtime: runtime)
     }
 

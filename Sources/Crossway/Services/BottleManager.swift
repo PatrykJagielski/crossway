@@ -90,7 +90,6 @@ final class BottleManager: ObservableObject {
             if bottle.runtimeID != previous.runtimeID {
                 // Different Wine version: let wineboot upgrade the prefix.
                 _ = try await runner.runAndWait(["wineboot", "--update"], name: "wineboot-update", in: bottle, runtime: runtime)
-                await runner.waitForWineserver(in: bottle, runtime: runtime)
             }
             try await applySystemSettings(bottle, runtime: runtime, previous: previous)
         } catch {
@@ -130,7 +129,8 @@ final class BottleManager: ObservableObject {
         let windowsPath = bottle.windowsPath(for: regFile) ?? "C:\\crossway-settings.reg"
         let code = try await runner.runAndWait(["regedit", "/S", windowsPath], name: "regedit-settings", in: bottle, runtime: runtime)
         try? FileManager.default.removeItem(at: regFile)
-        await runner.waitForWineserver(in: bottle, runtime: runtime)
+        // No `wineserver -w` here: it would block until every program in the bottle
+        // (e.g. a running Steam) exits. regedit has already handed the keys to wineserver.
         if code != 0 { throw CrosswayError.processFailed("regedit", code) }
     }
 

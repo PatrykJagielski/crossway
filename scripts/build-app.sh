@@ -28,6 +28,7 @@ if [ ! -f build/AppIcon.icns ]; then
     iconutil -c icns "$ICONSET" -o build/AppIcon.icns
 fi
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Sources/Crossway/Resources/steamwebhelper-wrapper.exe "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

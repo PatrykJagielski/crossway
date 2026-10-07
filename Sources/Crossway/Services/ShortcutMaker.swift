@@ -75,12 +75,12 @@ enum CommandLineLauncher {
             alert("Brak środowiska Wine „\(bottle.runtimeID)” dla butelki „\(bottle.name)”.")
             return 1
         }
-        let url = URL(fileURLWithPath: path)
+        let (url, extraArguments) = SteamFix.prepare(file: URL(fileURLWithPath: path), arguments: extra, in: bottle)
         do {
             let process = try WineLauncher.makeProcess(
                 bottle: bottle,
                 runtime: runtime,
-                arguments: WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(extra)),
+                arguments: WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(extraArguments)),
                 workingDirectory: url.deletingLastPathComponent(),
                 logURL: WineLauncher.newLogURL(bottle: bottle, label: url.deletingPathExtension().lastPathComponent)
             )
