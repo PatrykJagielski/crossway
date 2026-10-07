@@ -109,10 +109,10 @@ struct BottleDetailView: View {
     }
 
     private func graphicsLabel(_ bottle: Bottle, _ runtime: WineRuntime?) -> String {
-        switch bottle.settings.graphics {
-        case .dxvk: return "DXVK"
-        case .automatic: return runtime?.graphicsSummary ?? "—"
-        }
+        guard let runtime else { return "—" }
+        let backend = WineLauncher.effectiveBackend(bottle.settings, runtime: runtime)
+        if backend == .d3dmetal, let version = runtime.d3dMetalVersion { return "D3DMetal \(version)" }
+        return backend.shortTitle
     }
 
     @ToolbarContentBuilder

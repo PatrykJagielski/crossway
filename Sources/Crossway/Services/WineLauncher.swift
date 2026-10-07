@@ -5,19 +5,33 @@ import Foundation
 enum WineLauncher {
     static let dxvkOverrides = "dxgi,d3d9,d3d10core,d3d11=n,b"
 
+    /// The backend a bottle really uses: `.automatic` and unavailable choices fall back
+    /// to the runtime's best option.
+    static func effectiveBackend(_ settings: BottleSettings, runtime: WineRuntime) -> GraphicsBackend {
+        let available = runtime.availableBackends
+        if settings.graphics != .automatic, available.contains(settings.graphics) { return settings.graphics }
+        return runtime.preferredBackend
+    }
+
     static func environment(bottle: Bottle, runtime: WineRuntime) -> [String: String] {
         let s = bottle.settings
         var env = ProcessInfo.processInfo.environment
-        // Never leak a prefix from the user's shell into a bottle.
-        for key in ["WINEPREFIX", "WINEARCH", "WINEDLLOVERRIDES", "WINESERVER", "WINELOADER", "WINEDEBUG"] {
+        // Never leak a prefix or renderer selection from the user's shell into a bottle.
+        for key in ["WINEPREFIX", "WINEARCH", "WINEDLLOVERRIDES", "WINESERVER", "WINELOADER", "WINEDEBUG",
+                    "WINEDLLPATH_D3DMETAL", "WINEDLLPATH_DXMT", "WINEDLLPATH_DXVK", "CX_APPLEGPTK_LIBD3DSHARED_PATH",
+                    "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH"] {
             env.removeValue(forKey: key)
         }
+        env.merge(runtime.baseEnvironment) { _, new in new }
 
         env["WINEPREFIX"] = bottle.url.path
         env["WINESERVER"] = runtime.wineserver.path
         env["PATH"] = [runtime.binDirectory.path, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
             .joined(separator: ":")
         env["WINEDEBUG"] = s.verboseLogging ? "+loaddll,+seh,warn+all,fixme-all" : "fixme-all"
+        // MoltenVK warns on every descriptor allocation in some games (tens of thousands
+        // of lines per second), which alone can stall a game and fill the disk.
+        env["MVK_CONFIG_LOG_LEVEL"] = s.verboseLogging ? "2" : "0"
         env["LANG"] = env["LANG"] ?? "pl_PL.UTF-8"
 
         switch s.sync {
@@ -33,11 +47,30 @@ enum WineLauncher {
 
         // winemenubuilder litters ~/Applications and the Dock with half-working entries.
         var overrides = ["winemenubuilder.exe=d"]
-        if s.graphics == .dxvk && runtime.hasVulkan {
-            overrides.append(dxvkOverrides)
+        switch effectiveBackend(s, runtime: runtime) {
+        case .d3dmetal:
+            // Sikarugir/CrossOver engines load renderers from WINEDLLPATH_<NAME> as builtins.
+            if let renderer = runtime.renderer("d3dmetal") {
+                let external = renderer.appendingPathComponent("external")
+                env["WINEDLLPATH_D3DMETAL"] = renderer.appendingPathComponent("wine").path
+                env["CX_APPLEGPTK_LIBD3DSHARED_PATH"] = external.appendingPathComponent("libd3dshared.dylib").path
+                env["DYLD_FALLBACK_FRAMEWORK_PATH"] = external.path
+            }
+        case .dxmt:
+            if let renderer = runtime.renderer("dxmt") {
+                env["WINEDLLPATH_DXMT"] = renderer.appendingPathComponent("wine").path
+            }
+        case .dxvk:
+            if let renderer = runtime.bundledDXVK {
+                env["WINEDLLPATH_DXVK"] = renderer.appendingPathComponent("wine").path
+            } else {
+                overrides.append(dxvkOverrides) // DLLs copied into the prefix
+            }
             if s.dxvkAsync { env["DXVK_ASYNC"] = "1" }
             env["DXVK_HUD"] = s.dxvkHUD ? "fps,devinfo,gpuload" : nil
-            env["DXVK_LOG_LEVEL"] = s.verboseLogging ? "info" : "warn"
+            env["DXVK_LOG_LEVEL"] = s.verboseLogging ? "info" : "none"
+        case .wined3d, .automatic:
+            break
         }
         if s.metalFX && runtime.hasMetalFXShim {
             overrides.append("nvapi,nvapi64,nvngx=n,b")

@@ -26,14 +26,41 @@ struct WineRuntime: Identifiable, Hashable, Codable {
 
     var wineserver: URL { binDirectory.appendingPathComponent("wineserver") }
 
-    var d3dMetalFramework: URL {
-        wineRoot.appendingPathComponent("lib/external/D3DMetal.framework")
+    /// Extra libraries and renderers shipped next to the wine root (Sikarugir/Kegworks
+    /// engines): `Frameworks/*.dylib` and `Frameworks/renderer/{d3dmetal,dxmt,dxvk}`.
+    var frameworks: URL? {
+        let url = wineRoot.deletingLastPathComponent().appendingPathComponent("Frameworks")
+        return FileManager.default.directoryExists(url) ? url : nil
     }
 
-    var hasD3DMetal: Bool { FileManager.default.directoryExists(d3dMetalFramework) }
+    func renderer(_ name: String) -> URL? {
+        guard let url = frameworks?.appendingPathComponent("renderer/\(name)"),
+              FileManager.default.directoryExists(url.appendingPathComponent("wine")) else { return nil }
+        return url
+    }
+
+    /// D3DMetal either built into the runtime (GPTK) or shipped as a renderer (Sikarugir).
+    var d3dMetalFramework: URL? {
+        let candidates = [
+            wineRoot.appendingPathComponent("lib/external/D3DMetal.framework"),
+            renderer("d3dmetal")?.appendingPathComponent("external/D3DMetal.framework"),
+        ].compactMap { $0 }
+        return candidates.first { FileManager.default.directoryExists($0) }
+    }
+
+    var hasD3DMetal: Bool { d3dMetalFramework != nil }
+
+    /// GPTK replaces Wine's own d3d11/dxgi with D3DMetal, so WineD3D is not available there.
+    var d3dMetalIsBuiltin: Bool {
+        FileManager.default.directoryExists(wineRoot.appendingPathComponent("lib/external/D3DMetal.framework"))
+    }
+
+    var hasDXMT: Bool { renderer("dxmt") != nil }
+    var bundledDXVK: URL? { renderer("dxvk") }
 
     var d3dMetalVersion: String? {
-        let plist = d3dMetalFramework.appendingPathComponent("Versions/A/Resources/version.plist")
+        guard let framework = d3dMetalFramework else { return nil }
+        let plist = framework.appendingPathComponent("Versions/A/Resources/version.plist")
         guard let dict = NSDictionary(contentsOf: plist) else { return nil }
         return dict["CFBundleShortVersionString"] as? String
     }
@@ -45,8 +72,23 @@ struct WineRuntime: Identifiable, Hashable, Codable {
 
     /// Vulkan (MoltenVK) is required for DXVK. GPTK builds ship without it.
     var hasVulkan: Bool {
-        FileManager.default.fileExists(atPath: wineRoot.appendingPathComponent("lib/libMoltenVK.dylib").path)
+        let fm = FileManager.default
+        return fm.fileExists(atPath: wineRoot.appendingPathComponent("lib/libMoltenVK.dylib").path)
+            || fm.fileExists(atPath: frameworks?.appendingPathComponent("libMoltenVK.dylib").path ?? "")
     }
+
+    /// Graphics backends this runtime can actually use, best first.
+    var availableBackends: [GraphicsBackend] {
+        var result: [GraphicsBackend] = []
+        if hasD3DMetal { result.append(.d3dmetal) }
+        if hasDXMT { result.append(.dxmt) }
+        if hasVulkan { result.append(.dxvk) }
+        if !d3dMetalIsBuiltin { result.append(.wined3d) }
+        return result
+    }
+
+    /// What `.automatic` resolves to.
+    var preferredBackend: GraphicsBackend { availableBackends.first ?? .wined3d }
 
     var isUsable: Bool {
         FileManager.default.isExecutableFile(atPath: wineBinary.path)
@@ -54,10 +96,18 @@ struct WineRuntime: Identifiable, Hashable, Codable {
     }
 
     var graphicsSummary: String {
-        if hasD3DMetal {
-            return "D3DMetal \(d3dMetalVersion ?? "")".trimmingCharacters(in: .whitespaces)
-        }
-        return "WineD3D"
+        var parts: [String] = []
+        if hasD3DMetal { parts.append("D3DMetal \(d3dMetalVersion ?? "")".trimmingCharacters(in: .whitespaces)) }
+        if hasDXMT { parts.append("DXMT") }
+        if bundledDXVK != nil { parts.append("DXVK") }
+        return parts.isEmpty ? "WineD3D" : parts.joined(separator: " · ")
+    }
+
+    /// Environment every process of this runtime needs (library lookup for Sikarugir engines).
+    var baseEnvironment: [String: String] {
+        guard let frameworks else { return [:] }
+        let libs = [frameworks.path, frameworks.appendingPathComponent("GStreamer.framework/Libraries").path, "/usr/local/lib", "/usr/lib"]
+        return ["DYLD_FALLBACK_LIBRARY_PATH": libs.joined(separator: ":")]
     }
 }
 

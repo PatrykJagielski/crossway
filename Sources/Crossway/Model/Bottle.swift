@@ -16,11 +16,37 @@ enum WindowsVersion: String, Codable, CaseIterable, Identifiable {
 }
 
 enum GraphicsBackend: String, Codable, CaseIterable, Identifiable {
-    /// Whatever the runtime ships: D3DMetal on GPTK builds, WineD3D otherwise.
+    /// The runtime's best option (D3DMetal when available).
     case automatic
+    /// Apple's D3DMetal (DirectX 11/12 → Metal), from GPTK or a Sikarugir renderer.
+    case d3dmetal
+    /// DXMT (DirectX 10/11 → Metal), open source.
+    case dxmt
     /// DXVK (DirectX 9–11 → Vulkan → MoltenVK → Metal).
     case dxvk
+    /// Wine's own WineD3D (OpenGL).
+    case wined3d
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic: return "Automatycznie"
+        case .d3dmetal: return "D3DMetal (DirectX 11/12 → Metal)"
+        case .dxmt: return "DXMT (DirectX 10/11 → Metal)"
+        case .dxvk: return "DXVK (DirectX 9–11 → Vulkan → Metal)"
+        case .wined3d: return "WineD3D (OpenGL)"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .automatic: return "Auto"
+        case .d3dmetal: return "D3DMetal"
+        case .dxmt: return "DXMT"
+        case .dxvk: return "DXVK"
+        case .wined3d: return "WineD3D"
+        }
+    }
 }
 
 enum SyncMode: String, Codable, CaseIterable, Identifiable {

@@ -81,26 +81,31 @@ struct GraphicsPicker: View {
     @Binding var settings: BottleSettings
     let runtime: WineRuntime?
 
+    private var available: [GraphicsBackend] { runtime?.availableBackends ?? [] }
+    private var effective: GraphicsBackend? {
+        runtime.map { WineLauncher.effectiveBackend(settings, runtime: $0) }
+    }
+
     var body: some View {
         Picker("Tłumaczenie DirectX", selection: $settings.graphics) {
-            Text(runtime?.hasD3DMetal == true ? "D3DMetal (DirectX 11/12 → Metal)" : "WineD3D (wbudowany)")
-                .tag(GraphicsBackend.automatic)
-            Text("DXVK (DirectX 9–11 → Vulkan → Metal)").tag(GraphicsBackend.dxvk)
-                .selectionDisabled(runtime?.hasVulkan != true)
+            Text("Automatycznie" + (runtime.map { " (\($0.preferredBackend.shortTitle))" } ?? "")).tag(GraphicsBackend.automatic)
+            ForEach(available) { Text($0.title).tag($0) }
         }
         .onChange(of: runtime?.id) {
-            if runtime?.hasVulkan != true { settings.graphics = .automatic }
+            if settings.graphics != .automatic, !available.contains(settings.graphics) { settings.graphics = .automatic }
         }
-        if runtime?.hasVulkan != true {
-            Text("To środowisko nie ma Vulkana — DXVK jest niedostępny.")
-                .font(.caption).foregroundStyle(.secondary)
+        if let hint = hint {
+            Text(hint).font(.caption).foregroundStyle(.secondary)
         }
-        if settings.graphics == .automatic, runtime?.hasD3DMetal == true {
-            Text("Zalecane dla gier DX11/DX12. Gry DX9 korzystają z WineD3D.")
-                .font(.caption).foregroundStyle(.secondary)
-        } else if settings.graphics == .dxvk {
-            Text("Dobre dla starszych gier DX9–DX11. Wymaga pobrania DXVK w oknie Środowiska.")
-                .font(.caption).foregroundStyle(.secondary)
+    }
+
+    private var hint: String? {
+        switch effective {
+        case .d3dmetal: return "Najlepsze dla gier DX11/DX12. Gry DX9 korzystają z WineD3D."
+        case .dxmt: return "Otwartoźródłowe tłumaczenie DX10/11 na Metal — spróbuj, gdy gra nie działa z D3DMetal."
+        case .dxvk: return "DX9–11 przez Vulkan (MoltenVK). Część gier ma błędy shaderów."
+        case .wined3d: return "Najwolniejsze, ale najbardziej zgodne — dla starych gier 2D/DX9."
+        default: return nil
         }
     }
 }

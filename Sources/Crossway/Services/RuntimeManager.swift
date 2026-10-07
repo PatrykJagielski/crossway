@@ -2,7 +2,7 @@ import Foundation
 
 /// A runtime or component that can be downloaded from GitHub releases.
 struct DownloadOffer: Identifiable, Hashable {
-    enum Kind { case runtime, dxvk }
+    enum Kind { case runtime, sikarugir, dxvk }
 
     let id: String
     let title: String
@@ -13,15 +13,35 @@ struct DownloadOffer: Identifiable, Hashable {
     let kind: Kind
     let recommended: Bool
 
+    /// Sikarugir's "Template" wrapper ships the libraries and renderers its engines need.
+    static let sikarugirTemplate = DownloadOffer(
+        id: "sikarugir-template",
+        title: "Sikarugir Template",
+        summary: "",
+        repository: "Sikarugir-App/Template",
+        assetPattern: #"^Template-[0-9.]+\.tar\.xz$"#,
+        kind: .sikarugir,
+        recommended: false
+    )
+
     static let all: [DownloadOffer] = [
+        DownloadOffer(
+            id: "sikarugir",
+            title: "Wine 10 CrossOver + D3DMetal 4 (Sikarugir)",
+            summary: "Wine z kodu CrossOver z rendererami D3DMetal 4, DXMT i DXVK do wyboru w każdej butelce. Działa z nowym Steamem — najlepszy wybór do gier.",
+            repository: "Sikarugir-App/Engines",
+            assetPattern: #"^WS12WineSikarugir10\.0(_[0-9]+)?\.tar\.xz$"#,
+            kind: .sikarugir,
+            recommended: true
+        ),
         DownloadOffer(
             id: "gptk",
             title: "Game Porting Toolkit 3 (D3DMetal)",
-            summary: "Wine z D3DMetal od Apple — DirectX 11/12 → Metal, ray tracing, DLSS→MetalFX. Najlepszy wybór dla gier na Apple Silicon.",
+            summary: "Wine 7.7 z D3DMetal 3 od Apple. Szybkie w grach, ale nowy klient Steama na nim nie działa — dla gier spoza Steama.",
             repository: "Gcenx/game-porting-toolkit",
             assetPattern: #"^game-porting-toolkit-.*\.tar\.xz$"#,
             kind: .runtime,
-            recommended: true
+            recommended: false
         ),
         DownloadOffer(
             id: "wine-staging",
@@ -96,8 +116,9 @@ final class RuntimeManager: ObservableObject {
         if let id = UserDefaults.standard.string(forKey: defaultRuntimeKey), let runtime = runtime(id: id) {
             return runtime
         }
-        // Prefer D3DMetal builds, newest managed first.
-        return runtimes.first { $0.hasD3DMetal && $0.source == .managed }
+        // Prefer engines with D3DMetal *and* a modern Wine (Steam works), then any D3DMetal build.
+        return runtimes.first { $0.hasD3DMetal && !$0.d3dMetalIsBuiltin && $0.source == .managed }
+            ?? runtimes.first { $0.hasD3DMetal && $0.source == .managed }
             ?? runtimes.first { $0.hasD3DMetal }
             ?? runtimes.first
     }
@@ -110,7 +131,7 @@ final class RuntimeManager: ObservableObject {
     func isInstalled(_ offer: DownloadOffer) -> Bool {
         switch offer.kind {
         case .dxvk: return dxvkInstalled
-        case .runtime: return runtimes.contains { $0.source == .managed && $0.id.hasPrefix(offer.id + "-") }
+        case .runtime, .sikarugir: return runtimes.contains { $0.source == .managed && $0.id.hasPrefix(offer.id + "-") }
         }
     }
 
@@ -128,13 +149,16 @@ final class RuntimeManager: ObservableObject {
         let regex = try NSRegularExpression(pattern: offer.assetPattern)
         for release in releases where (release["prerelease"] as? Bool) != true && (release["draft"] as? Bool) != true {
             let tag = release["tag_name"] as? String ?? "?"
-            for asset in release["assets"] as? [[String: Any]] ?? [] {
-                guard let name = asset["name"] as? String,
-                      regex.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) != nil,
-                      let link = asset["browser_download_url"] as? String,
-                      let url = URL(string: link) else { continue }
-                return ReleaseAsset(tag: tag, name: name, url: url, size: (asset["size"] as? NSNumber)?.int64Value ?? 0)
+            // Some repos (Sikarugir) keep every build in one release: take the newest upload.
+            let matches = (release["assets"] as? [[String: Any]] ?? []).filter { asset in
+                guard let name = asset["name"] as? String else { return false }
+                return regex.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) != nil
             }
+            guard let asset = matches.max(by: { ($0["updated_at"] as? String ?? "") < ($1["updated_at"] as? String ?? "") }),
+                  let name = asset["name"] as? String,
+                  let link = asset["browser_download_url"] as? String,
+                  let url = URL(string: link) else { continue }
+            return ReleaseAsset(tag: tag, name: name, url: url, size: (asset["size"] as? NSNumber)?.int64Value ?? 0)
         }
         throw CrosswayError.message("Nie znaleziono pliku do pobrania w \(offer.repository).")
     }
@@ -148,6 +172,7 @@ final class RuntimeManager: ObservableObject {
             let archive = try await download(asset, offerID: offer.id)
             switch offer.kind {
             case .runtime: try await installRuntime(from: archive, offer: offer, asset: asset)
+            case .sikarugir: try await installSikarugir(engine: archive, offer: offer, asset: asset)
             case .dxvk: try await installDXVK(from: archive)
             }
             try? FileManager.default.removeItem(at: archive)
@@ -194,14 +219,64 @@ final class RuntimeManager: ObservableObject {
         let wineRootURL = target.appendingPathComponent(relative)
         let probe = WineRuntime(id: id, name: "", version: "", wineRoot: wineRootURL, source: .managed)
         var version = asset.tag
-        if let (status, out) = try? await Shell.run(probe.wineBinary.path, ["--version"]), status == 0 {
+        var env = ProcessInfo.processInfo.environment
+        env.merge(probe.baseEnvironment) { _, new in new }
+        if let (status, out) = try? await Shell.run(probe.wineBinary.path, ["--version"], environment: env), status == 0 {
             version = out.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let name = offer.kind == .runtime && offer.id == "gptk"
-            ? "Game Porting Toolkit \(asset.tag.replacingOccurrences(of: "Game-Porting-Toolkit-", with: ""))"
-            : "\(offer.title.replacingOccurrences(of: " (najnowszy)", with: "")) \(asset.tag)"
+        let name: String
+        switch offer.id {
+        case "gptk": name = "Game Porting Toolkit \(asset.tag.replacingOccurrences(of: "Game-Porting-Toolkit-", with: ""))"
+        case "sikarugir": name = "Wine 10 CrossOver (\(asset.tag))"
+        default: name = "\(offer.title.replacingOccurrences(of: " (najnowszy)", with: "")) \(asset.tag)"
+        }
         let manifest = RuntimeManifest(id: id, name: name, version: version, wineRootRelative: relative, installed: Date())
         try JSONEncoder.crossway.encode(manifest).write(to: target.appendingPathComponent(RuntimeDiscovery.manifestName))
+    }
+
+    /// Sikarugir engine (`wswine.bundle`) + the Template's `Contents/Frameworks`
+    /// (dylibs and the d3dmetal/dxmt/dxvk renderers) laid out side by side.
+    private func installSikarugir(engine: URL, offer: DownloadOffer, asset: ReleaseAsset) async throws {
+        let template = try await latestAsset(for: DownloadOffer.sikarugirTemplate)
+        let templateArchive = try await download(template, offerID: offer.id)
+        defer { try? FileManager.default.removeItem(at: templateArchive) }
+
+        progress[offer.id] = TaskProgress(message: "Rozpakowywanie bibliotek i rendererów…", fraction: nil)
+        let fm = FileManager.default
+        let scratch = Paths.downloads.appendingPathComponent(".template-\(UUID().uuidString)")
+        try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: scratch) }
+        let (code, output) = try await Shell.run("/usr/bin/tar", ["-xf", templateArchive.path, "-C", scratch.path])
+        guard code == 0 else { throw CrosswayError.message("Rozpakowanie Template nie powiodło się: \(output.suffix(400))") }
+        guard let app = try fm.contentsOfDirectory(at: scratch, includingPropertiesForKeys: nil).first(where: { $0.pathExtension == "app" }) else {
+            throw CrosswayError.message("Archiwum Template nie zawiera aplikacji.")
+        }
+        let frameworks = app.appendingPathComponent("Contents/Frameworks")
+        guard fm.directoryExists(frameworks.appendingPathComponent("renderer")) else {
+            throw CrosswayError.message("Template nie zawiera rendererów (Frameworks/renderer).")
+        }
+
+        // Tag the runtime by engine build, e.g. sikarugir-WS12WineSikarugir10.0_8.
+        let engineName = asset.name.replacingOccurrences(of: ".tar.xz", with: "")
+        let tagged = ReleaseAsset(tag: engineName, name: asset.name, url: asset.url, size: asset.size)
+        try await installRuntime(from: engine, offer: offer, asset: tagged)
+
+        let target = Paths.runtimes.appendingPathComponent("\(offer.id)-\(engineName)")
+        try? fm.removeItem(at: target.appendingPathComponent("Frameworks"))
+        try fm.moveItem(at: frameworks, to: target.appendingPathComponent("Frameworks"))
+        _ = try? await Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", target.path])
+
+        // Re-probe now that the libraries are in place.
+        if var manifest = try? JSONDecoder.crossway.decode(RuntimeManifest.self, from: Data(contentsOf: target.appendingPathComponent(RuntimeDiscovery.manifestName))) {
+            let probe = WineRuntime(id: manifest.id, name: "", version: "", wineRoot: target.appendingPathComponent(manifest.wineRootRelative), source: .managed)
+            var env = ProcessInfo.processInfo.environment
+            env.merge(probe.baseEnvironment) { _, new in new }
+            if let (status, out) = try? await Shell.run(probe.wineBinary.path, ["--version"], environment: env), status == 0 {
+                manifest.version = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                manifest.name = "Wine 10 CrossOver (Sikarugir)"
+                try JSONEncoder.crossway.encode(manifest).write(to: target.appendingPathComponent(RuntimeDiscovery.manifestName))
+            }
+        }
     }
 
     private func findWineRoot(in directory: URL) -> URL? {

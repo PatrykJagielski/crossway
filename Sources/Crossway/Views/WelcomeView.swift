@@ -4,7 +4,7 @@ import SwiftUI
 struct WelcomeView: View {
     @EnvironmentObject private var runtimes: RuntimeManager
 
-    private var gptk: DownloadOffer { DownloadOffer.all.first { $0.id == "gptk" }! }
+    private var gptk: DownloadOffer { DownloadOffer.all.first { $0.recommended }! }
 
     var body: some View {
         ScrollView {
@@ -25,7 +25,7 @@ struct WelcomeView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Krok 1: pobierz środowisko Wine", systemImage: "1.circle.fill")
                             .font(.headline)
-                        Text("Crossway używa Wine z Game Porting Toolkit od Apple (D3DMetal), który tłumaczy DirectX 11/12 na Metal. Pobranie to ok. 240 MB, po rozpakowaniu ~1 GB.")
+                        Text("Crossway używa Wine z kodu CrossOver z D3DMetal od Apple (DirectX 11/12 → Metal) oraz DXMT i DXVK. Pobranie to ok. 250 MB, po rozpakowaniu ~1,5 GB.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         if let progress = runtimes.progress[gptk.id] {
@@ -34,7 +34,7 @@ struct WelcomeView: View {
                             Button {
                                 Task { await runtimes.install(gptk) }
                             } label: {
-                                Label("Pobierz Game Porting Toolkit 3", systemImage: "arrow.down.circle.fill")
+                                Label("Pobierz środowisko Wine", systemImage: "arrow.down.circle.fill")
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.large)

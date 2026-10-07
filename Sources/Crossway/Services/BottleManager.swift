@@ -140,7 +140,7 @@ final class BottleManager: ObservableObject {
         let system32 = bottle.driveC.appendingPathComponent("windows/system32")
         let syswow64 = bottle.driveC.appendingPathComponent("windows/syswow64")
 
-        if bottle.settings.graphics == .dxvk {
+        if WineLauncher.effectiveBackend(bottle.settings, runtime: runtime) == .dxvk, runtime.bundledDXVK == nil {
             guard runtime.hasVulkan else {
                 throw CrosswayError.message("Środowisko „\(runtime.name)” nie obsługuje Vulkana, więc DXVK nie zadziała. Wybierz D3DMetal albo środowisko Wine Staging.")
             }

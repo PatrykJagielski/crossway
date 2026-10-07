@@ -36,12 +36,12 @@ struct BottleSettingsView: View {
                 Section("Grafika") {
                     GraphicsPicker(settings: $draft.settings, runtime: runtime)
                     Toggle("Metal Performance HUD (FPS, czas klatki, GPU)", isOn: $draft.settings.metalHUD)
-                    if draft.settings.graphics == .automatic, runtime?.hasD3DMetal == true {
+                    if let runtime, WineLauncher.effectiveBackend(draft.settings, runtime: runtime) == .d3dmetal {
                         Toggle("Ray tracing DirectX (DXR) — M3 i nowsze", isOn: $draft.settings.raytracing)
                         Toggle("DLSS → MetalFX (eksperymentalne)", isOn: $draft.settings.metalFX)
-                            .disabled(runtime?.hasMetalFXShim != true)
+                            .disabled(runtime.hasMetalFXShim != true)
                     }
-                    if draft.settings.graphics == .dxvk {
+                    if let runtime, WineLauncher.effectiveBackend(draft.settings, runtime: runtime) == .dxvk {
                         Toggle("DXVK async (mniej przycięć przy kompilacji shaderów)", isOn: $draft.settings.dxvkAsync)
                         Toggle("Nakładka DXVK HUD", isOn: $draft.settings.dxvkHUD)
                     }
