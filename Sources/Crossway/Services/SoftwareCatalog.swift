@@ -32,7 +32,7 @@ struct CatalogItem: Identifiable, Hashable {
             symbol: "gamecontroller.fill", category: .stores,
             source: .installer(url: URL(string: "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe")!, fileName: "SteamSetup.exe", arguments: []),
             mainProgram: [#"C:\Program Files (x86)\Steam\steam.exe"#, #"C:\Program Files\Steam\steam.exe"#],
-            tips: "Jeśli okno Steama jest czarne lub puste, dodaj argument -cef-disable-gpu w ustawieniach programu."
+            tips: "Wymaga butelki z Wine Staging 11 — na GPTK (Wine 7.7) przeglądarka Steama się wysypuje i okno się nie pojawia. Gry DX9–11 uruchamiaj wtedy przez DXVK."
         ),
         CatalogItem(
             id: "epic", name: "Epic Games Launcher",
