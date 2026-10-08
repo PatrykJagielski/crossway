@@ -57,7 +57,7 @@ enum SyncMode: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .none: return "Wyłączona"
         case .esync: return "ESync"
-        case .msync: return "MSync (tylko CrossOver-owe buildy)"
+        case .msync: return "MSync (zalecane dla Wine 10 CrossOver)"
         }
     }
 }

@@ -90,6 +90,14 @@ struct WineRuntime: Identifiable, Hashable, Codable {
     /// What `.automatic` resolves to.
     var preferredBackend: GraphicsBackend { availableBackends.first ?? .wined3d }
 
+    /// CrossOver-derived builds (Sikarugir) support MSync — Mach-semaphore based sync.
+    /// With ESync on those engines Steam's download threads stall forever.
+    var supportsMSync: Bool {
+        let ntdll = wineRoot.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")
+        guard let data = try? Data(contentsOf: ntdll, options: .mappedIfSafe) else { return false }
+        return data.range(of: Data("WINEMSYNC".utf8)) != nil
+    }
+
     var isUsable: Bool {
         FileManager.default.isExecutableFile(atPath: wineBinary.path)
             && FileManager.default.isExecutableFile(atPath: wineserver.path)

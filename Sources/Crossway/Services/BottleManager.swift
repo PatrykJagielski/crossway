@@ -51,6 +51,8 @@ final class BottleManager: ObservableObject {
 
     func create(name: String, runtime: WineRuntime, settings: BottleSettings) async -> Bottle? {
         let id = UUID()
+        var settings = settings
+        if settings.sync == .esync, runtime.supportsMSync { settings.sync = .msync }
         let bottle = Bottle(
             id: id,
             name: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Nowa butelka" : name,
