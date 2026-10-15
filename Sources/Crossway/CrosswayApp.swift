@@ -73,6 +73,10 @@ struct CrosswayApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Środowiska Wine…") { state.showRuntimes = true }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
+                Button("Wymuś zamknięcie wszystkich programów Windows") {
+                    Task { _ = await state.runner.forceQuitEverything() }
+                }
+                .keyboardShortcut(.escape, modifiers: [.command, .option, .shift])
             }
         }
 

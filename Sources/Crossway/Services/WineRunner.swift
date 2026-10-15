@@ -69,6 +69,19 @@ final class WineRunner: ObservableObject {
         for entry in running(in: bottle) where entry.process.isRunning {
             entry.process.terminate()
         }
+        // If the wineserver had already died, `-k` reaches nothing: kill leftovers directly.
+        let snapshot = bottle
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
+            WineProcessKiller.kill(WineProcessKiller.processes(in: snapshot))
+        }
+    }
+
+    /// Emergency stop for every Windows program, in every bottle.
+    func forceQuitEverything() async -> Int {
+        for entry in running where entry.process.isRunning { entry.process.terminate() }
+        return await Task.detached(priority: .userInitiated) {
+            WineProcessKiller.kill(WineProcessKiller.wineProcesses())
+        }.value
     }
 
     /// Waits until the bottle's wineserver exits (all programs closed, registry flushed).

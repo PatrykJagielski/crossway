@@ -119,6 +119,20 @@ enum CLI {
             print("Zapisano ustawienia butelki \(updated.name)")
             return 0
 
+        case "kill":
+            // kill [butelka] — bez nazwy zamyka wszystkie programy Windows
+            if args.count > 1 {
+                guard let bottle = bottles.bottles.first(where: { $0.name == args[1] || $0.id.uuidString == args[1] }),
+                      let runtime = try? bottles.runtime(for: bottle) else { print("Nie ma butelki \(args[1])"); return 1 }
+                runner.killAll(in: bottle, runtime: runtime)
+                try? await Task.sleep(for: .seconds(3))
+                let left = WineProcessKiller.processes(in: bottle)
+                print(left.isEmpty ? "Zamknięto programy w \(bottle.name)" : "Nadal działa: \(left.count)")
+            } else {
+                print("Zamknięto procesów: \(await runner.forceQuitEverything())")
+            }
+            return 0
+
         case "snapshot":
             return await Snapshot.render(to: args.count > 1 ? args[1] : "snapshot.png", view: args.count > 2 ? args[2] : "programs")
 
