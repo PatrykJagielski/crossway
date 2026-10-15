@@ -119,6 +119,21 @@ enum CLI {
             print("Zapisano ustawienia butelki \(updated.name)")
             return 0
 
+        case "shortcut":
+            // shortcut <butelka> <plik> [nazwa]
+            guard args.count > 2, let bottle = bottles.bottles.first(where: { $0.name == args[1] || $0.id.uuidString == args[1] }) else {
+                print("Użycie: shortcut <butelka> <plik> [nazwa]"); return 64
+            }
+            let file = URL(fileURLWithPath: args[2])
+            let name = args.count > 3 ? args[3] : file.deletingPathExtension().lastPathComponent
+            do {
+                let app = try ShortcutMaker.createShortcut(name: name, program: PinnedProgram(name: name, path: file.path), bottle: bottle)
+                print(app.path)
+                return 0
+            } catch {
+                print("Błąd: \(error.localizedDescription)"); return 1
+            }
+
         case "kill":
             // kill [butelka] — bez nazwy zamyka wszystkie programy Windows
             if args.count > 1 {

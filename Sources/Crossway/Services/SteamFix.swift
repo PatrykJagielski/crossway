@@ -61,7 +61,7 @@ enum SteamFix {
                 Thread.sleep(forTimeInterval: 3)
                 installWrapper(steamDirectory: steam)
                 let unwrapped = WineProcessKiller.processes(in: bottle).filter {
-                    $0.command.localizedCaseInsensitiveContains("\\steamwebhelper.exe")
+                    WineProcessKiller.command($0.command, runs: "steamwebhelper.exe")
                 }
                 WineProcessKiller.kill(unwrapped)
             }
@@ -75,6 +75,56 @@ enum SteamFix {
             dir.lastPathComponent.hasPrefix("cef.win")
                 && (size(of: dir.appendingPathComponent("steamwebhelper.exe")) ?? 0) >= wrapperSizeCeiling
         }
+    }
+
+    /// An executable installed by Steam (…/steamapps/common/…).
+    static func isSteamGame(_ url: URL) -> Bool {
+        url.path.lowercased().contains("/steamapps/common/") && url.pathExtension.lowercased() == "exe"
+    }
+
+    static func steamIsRunning(in bottle: Bottle) -> Bool {
+        WineProcessKiller.processes(in: bottle).contains { WineProcessKiller.command($0.command, runs: "steam.exe") }
+    }
+
+    /// Starts Steam in the bottle (if needed) and waits until it has logged on.
+    static func ensureSteamRunning(in bottle: Bottle, runtime: WineRuntime, timeout: TimeInterval = 90) {
+        guard !steamIsRunning(in: bottle), let steam = steamDirectory(in: bottle) else { return }
+        let log = steam.appendingPathComponent("logs/connection_log.txt")
+        let startOffset = (try? FileManager.default.attributesOfItem(atPath: log.path)[.size] as? NSNumber)?.intValue ?? 0
+
+        let (url, arguments) = prepare(file: steam.appendingPathComponent("steam.exe"), arguments: "", in: bottle)
+        guard let process = try? WineLauncher.makeProcess(
+            bottle: bottle, runtime: runtime,
+            arguments: WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(arguments)),
+            workingDirectory: steam,
+            logURL: WineLauncher.newLogURL(bottle: bottle, label: "steam")
+        ), (try? process.run()) != nil else { return }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 2)
+            guard let handle = try? FileHandle(forReadingFrom: log) else { continue }
+            try? handle.seek(toOffset: UInt64(startOffset))
+            let fresh = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+            try? handle.close()
+            if fresh.contains("[Logged On") {
+                Thread.sleep(forTimeInterval: 3) // let the client settle before launching a game
+                return
+            }
+        }
+    }
+
+    /// Blocks while a process with this executable name runs in the bottle.
+    static func waitForGame(named exe: String, in bottle: Bottle, appearTimeout: TimeInterval = 120) {
+        func running() -> Bool {
+            WineProcessKiller.processes(in: bottle).contains { WineProcessKiller.command($0.command, runs: exe) }
+        }
+        let appearDeadline = Date().addingTimeInterval(appearTimeout)
+        while !running() {
+            if Date() > appearDeadline { return }
+            Thread.sleep(forTimeInterval: 2)
+        }
+        while running() { Thread.sleep(forTimeInterval: 3) }
     }
 
     static func installWrapper(steamDirectory steam: URL) {

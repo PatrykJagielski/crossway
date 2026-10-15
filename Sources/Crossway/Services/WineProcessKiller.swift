@@ -17,9 +17,17 @@ enum WineProcessKiller {
             guard let space = trimmed.firstIndex(of: " "), let pid = Int32(trimmed[..<space]) else { return nil }
             let command = String(trimmed[space...]).trimmingCharacters(in: .whitespaces)
             let isWindowsProgram = command.range(of: #"^[A-Za-z]:\\"#, options: .regularExpression) != nil
-            let isWine = command == "(wine)" || command.contains("/Crossway/Runtimes/")
+            // Programs Crossway starts by Unix path keep it as their name (…/Bottles/…/x.exe).
+            let isWine = command == "(wine)" || command.contains("/Crossway/Runtimes/") || command.contains("/Crossway/Bottles/")
             return (isWindowsProgram || isWine) && pid != getpid() ? Candidate(pid: pid, command: command) : nil
         }
+    }
+
+    /// True when the process runs the given executable, whether Wine shows it as
+    /// `C:\…\name.exe` or as the Unix path it was started with.
+    static func command(_ command: String, runs exe: String) -> Bool {
+        let normalized = command.lowercased().replacingOccurrences(of: "/", with: "\\")
+        return normalized.contains("\\" + exe.lowercased())
     }
 
     /// Wine processes that hold files open inside `bottle` (its prefix is their WINEPREFIX).

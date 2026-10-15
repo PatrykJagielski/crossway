@@ -75,7 +75,12 @@ enum CommandLineLauncher {
             alert("Brak środowiska Wine „\(bottle.runtimeID)” dla butelki „\(bottle.name)”.")
             return 1
         }
-        let (url, extraArguments) = SteamFix.prepare(file: URL(fileURLWithPath: path), arguments: extra, in: bottle)
+        let original = URL(fileURLWithPath: path)
+        // Steam games need the bottle's Steam running (with the webhelper fix) first.
+        if SteamFix.isSteamGame(original) {
+            SteamFix.ensureSteamRunning(in: bottle, runtime: runtime)
+        }
+        let (url, extraArguments) = SteamFix.prepare(file: original, arguments: extra, in: bottle)
         do {
             let process = try WineLauncher.makeProcess(
                 bottle: bottle,
@@ -86,6 +91,11 @@ enum CommandLineLauncher {
             )
             try process.run()
             process.waitUntilExit()
+            if SteamFix.isSteamGame(original) {
+                // The game's own exe usually hands off to Steam and exits at once; stay alive
+                // while the real game runs so Steam (Remote Play) or the Dock see it running.
+                SteamFix.waitForGame(named: original.lastPathComponent, in: bottle)
+            }
             return process.terminationStatus
         } catch {
             alert("Nie udało się uruchomić programu: \(error.localizedDescription)")
