@@ -38,12 +38,43 @@ enum SteamFix {
     static func prepare(file url: URL, arguments: String, in bottle: Bottle) -> (URL, String) {
         guard isSteamLauncher(url), let steam = steamDirectory(in: bottle) else { return (url, arguments) }
         installWrapper(steamDirectory: steam)
+        guardWrapper(steamDirectory: steam, in: bottle)
         var args = arguments
         if !args.contains("-noverifyfiles") {
             args = (args + " -noverifyfiles").trimmingCharacters(in: .whitespaces)
         }
         // A .lnk cannot carry our extra argument — start steam.exe directly instead.
         return (steam.appendingPathComponent("steam.exe"), args)
+    }
+
+    /// Steam applies client updates right after it starts, which puts Valve's helper back
+    /// over the wrapper (the UI then hangs or goes black). Watch the CEF folders for a few
+    /// minutes; when that happens, re-install the wrapper (keeping the new helper as
+    /// `_real`) and kill the unwrapped helper so Steam relaunches it through the wrapper.
+    static func guardWrapper(steamDirectory steam: URL, in bottle: Bottle, duration: TimeInterval = 240) {
+        DispatchQueue.global(qos: .utility).async {
+            let deadline = Date().addingTimeInterval(duration)
+            while Date() < deadline {
+                Thread.sleep(forTimeInterval: 1)
+                guard valveHelperIsActive(steamDirectory: steam) else { continue }
+                // Let the updater finish writing before we touch the files.
+                Thread.sleep(forTimeInterval: 3)
+                installWrapper(steamDirectory: steam)
+                let unwrapped = WineProcessKiller.processes(in: bottle).filter {
+                    $0.command.localizedCaseInsensitiveContains("\\steamwebhelper.exe")
+                }
+                WineProcessKiller.kill(unwrapped)
+            }
+        }
+    }
+
+    private static func valveHelperIsActive(steamDirectory steam: URL) -> Bool {
+        let cefRoot = steam.appendingPathComponent("bin/cef")
+        let dirs = (try? FileManager.default.contentsOfDirectory(at: cefRoot, includingPropertiesForKeys: nil)) ?? []
+        return dirs.contains { dir in
+            dir.lastPathComponent.hasPrefix("cef.win")
+                && (size(of: dir.appendingPathComponent("steamwebhelper.exe")) ?? 0) >= wrapperSizeCeiling
+        }
     }
 
     static func installWrapper(steamDirectory steam: URL) {
