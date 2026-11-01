@@ -29,6 +29,8 @@ if [ ! -f build/AppIcon.icns ]; then
 fi
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp Sources/Crossway/Resources/steamwebhelper-wrapper.exe "$APP/Contents/Resources/"
+# x86_64 SDL with libusb for wired Xbox controllers (scripts/build-usb-gamepads.sh).
+cp -R Sources/Crossway/Resources/UsbGamepads "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

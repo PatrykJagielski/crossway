@@ -61,6 +61,12 @@ struct BottleSettingsView: View {
                     Toggle("⌘ Command działa jak Ctrl", isOn: $draft.settings.commandAsControl)
                 }
 
+                Section("Kontrolery") {
+                    Toggle("Pady Xbox na kablu USB (bez sterownika macOS)", isOn: $draft.settings.usbGamepads)
+                    Text("Obsługuje przewodowe pady Xbox innych firm (np. Turtle Beach, PDP, PowerA), których macOS nie widzi. Pad jest używany tylko przez tę butelkę, gdy coś w niej działa — zamknij inne programy, które go trzymają (np. strony z WebUSB w Chrome). Po zmianie zamknij wszystkie programy w butelce.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
                 Section {
                     Toggle("Szczegółowe logi (wolniej)", isOn: $draft.settings.verboseLogging)
                     TextField("Nadpisania DLL", text: $draft.settings.dllOverrides, prompt: Text("np. dinput8=n,b;xinput1_3=n,b"))

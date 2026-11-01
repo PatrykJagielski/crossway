@@ -81,6 +81,8 @@ struct BottleSettings: Codable, Hashable {
     var retinaMode = false
     var commandAsControl = false
     var verboseLogging = false
+    /// Wired Xbox controllers without a macOS driver, read over USB (see UsbGamepads).
+    var usbGamepads = true
     var dllOverrides = ""
     var environment: [EnvironmentVariable] = []
 
@@ -102,6 +104,7 @@ struct BottleSettings: Codable, Hashable {
         retinaMode = try c.decodeIfPresent(Bool.self, forKey: .retinaMode) ?? d.retinaMode
         commandAsControl = try c.decodeIfPresent(Bool.self, forKey: .commandAsControl) ?? d.commandAsControl
         verboseLogging = try c.decodeIfPresent(Bool.self, forKey: .verboseLogging) ?? d.verboseLogging
+        usbGamepads = try c.decodeIfPresent(Bool.self, forKey: .usbGamepads) ?? d.usbGamepads
         dllOverrides = try c.decodeIfPresent(String.self, forKey: .dllOverrides) ?? d.dllOverrides
         environment = try c.decodeIfPresent([EnvironmentVariable].self, forKey: .environment) ?? d.environment
     }

@@ -25,6 +25,7 @@ enum WineLauncher {
             env.removeValue(forKey: key)
         }
         env.merge(runtime.baseEnvironment) { _, new in new }
+        if s.usbGamepads { UsbGamepads.apply(to: &env, runtime: runtime) }
 
         env["WINEPREFIX"] = bottle.url.path
         env["WINESERVER"] = runtime.wineserver.path
@@ -137,7 +138,7 @@ enum WineLauncher {
 
     private static func header(bottle: Bottle, runtime: WineRuntime, arguments: [String], env: [String: String]) -> Data {
         let interesting = env.filter { key, _ in
-            key.hasPrefix("WINE") || key.hasPrefix("DXVK") || key.hasPrefix("D3DM") || key.hasPrefix("MTL") || key.hasPrefix("ROSETTA")
+            key.hasPrefix("WINE") || key.hasPrefix("DXVK") || key.hasPrefix("SDL_") || key.hasPrefix("D3DM") || key.hasPrefix("MTL") || key.hasPrefix("ROSETTA")
         }
         var text = "Crossway — \(Date())\n"
         text += "Butelka: \(bottle.name) (\(bottle.url.path))\n"

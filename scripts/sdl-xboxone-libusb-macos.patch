@@ -1,0 +1,13 @@
+--- a/src/joystick/hidapi/SDL_hidapi_xboxone.c
++++ b/src/joystick/hidapi/SDL_hidapi_xboxone.c
+@@ -368,7 +368,9 @@
+     static const int XBONE_IFACE_PROTOCOL = 208;
+ 
+ #if defined(SDL_PLATFORM_MACOS) && defined(SDL_JOYSTICK_MFI)
+-    if (!SDL_IsJoystickBluetoothXboxOne(vendor_id, product_id)) {
++    // Crossway: a wired controller reached through libusb (vendor-specific GIP interface)
++    // has no macOS driver and no GCController, but full reports — so keep it.
++    if (!SDL_IsJoystickBluetoothXboxOne(vendor_id, product_id) && interface_class != LIBUSB_CLASS_VENDOR_SPEC) {
+         // On macOS we get a shortened version of the real report and
+         // you can't write output reports for wired controllers, so
+         // we'll just use the GCController support instead.
