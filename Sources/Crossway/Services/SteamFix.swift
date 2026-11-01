@@ -82,6 +82,44 @@ enum SteamFix {
         url.path.lowercased().contains("/steamapps/common/") && url.pathExtension.lowercased() == "exe"
     }
 
+    /// Steam app id of a game exe under `steamapps/common/<installdir>/…`, read from the
+    /// matching `steamapps/appmanifest_<id>.acf`.
+    static func appID(forGame exe: URL) -> String? {
+        let parts = exe.standardizedFileURL.pathComponents
+        guard let common = parts.lastIndex(where: { $0.lowercased() == "common" }), common > 0,
+              parts[common - 1].lowercased() == "steamapps", common + 1 < parts.count else { return nil }
+        let installDir = parts[common + 1].lowercased()
+        let steamapps = URL(fileURLWithPath: NSString.path(withComponents: Array(parts[...(common - 1)])))
+        let manifests = (try? FileManager.default.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil)) ?? []
+        for manifest in manifests where manifest.lastPathComponent.hasPrefix("appmanifest_") && manifest.pathExtension == "acf" {
+            guard let text = try? String(contentsOf: manifest, encoding: .utf8) else { continue }
+            if acfValue("installdir", in: text)?.lowercased() == installDir { return acfValue("appid", in: text) }
+        }
+        return nil
+    }
+
+    private static func acfValue(_ key: String, in text: String) -> String? {
+        for line in text.split(separator: "\n") {
+            let fields = line.split(separator: "\"", omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            if fields.count >= 2, fields[0].lowercased() == key { return fields[1] }
+        }
+        return nil
+    }
+
+    /// A Steam game started from its exe normally restarts itself through Steam and then
+    /// inherits Steam's environment — losing a per-program renderer. `steam_appid.txt` next
+    /// to the exe makes the Steam API skip that restart, so the game stays in our process.
+    /// Steam itself must still be running and logged on.
+    @discardableResult
+    static func keepGameInOwnProcess(_ exe: URL) -> Bool {
+        guard let id = appID(forGame: exe) else { return false }
+        let file = exe.deletingLastPathComponent().appendingPathComponent("steam_appid.txt")
+        if let existing = try? String(contentsOf: file, encoding: .utf8),
+           existing.trimmingCharacters(in: .whitespacesAndNewlines) == id { return true }
+        return (try? id.write(to: file, atomically: true, encoding: .utf8)) != nil
+    }
+
     static func steamIsRunning(in bottle: Bottle) -> Bool {
         WineProcessKiller.processes(in: bottle).contains { WineProcessKiller.command($0.command, runs: "steam.exe") }
     }

@@ -36,13 +36,31 @@ final class WineRunner: ObservableObject {
         running.filter { $0.bottleID == bottle.id }
     }
 
-    /// Launches a Windows program (exe/msi/lnk/bat) without waiting for it.
+    /// Launches a Windows program (exe/msi/lnk/bat) without waiting for it. Returns nil when
+    /// the launch had to wait for Steam to start first (it then happens in the background).
     @discardableResult
-    func launch(file original: URL, arguments originalArguments: String = "", name: String? = nil, in bottle: Bottle, runtime: WineRuntime) throws -> RunningProcess {
+    func launch(file original: URL, arguments originalArguments: String = "", name: String? = nil, in bottle: Bottle, runtime: WineRuntime) throws -> RunningProcess? {
+        let graphics = bottle.graphicsOverride(for: original)
         let (url, arguments) = SteamFix.prepare(file: original, arguments: originalArguments, in: bottle)
         let args = WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(arguments))
         let label = name ?? original.deletingPathExtension().lastPathComponent
-        return try start(arguments: args, name: label, workingDirectory: url.deletingLastPathComponent(), bottle: bottle, runtime: runtime)
+        let directory = url.deletingLastPathComponent()
+
+        // A Steam game with its own renderer runs straight from its exe (see
+        // SteamFix.keepGameInOwnProcess), which needs a logged-on Steam beforehand.
+        if graphics != nil, SteamFix.isSteamGame(original) {
+            SteamFix.keepGameInOwnProcess(original)
+            if !SteamFix.steamIsRunning(in: bottle) {
+                Task {
+                    await Task.detached(priority: .userInitiated) {
+                        SteamFix.ensureSteamRunning(in: bottle, runtime: runtime)
+                    }.value
+                    _ = try? self.start(arguments: args, name: label, workingDirectory: directory, bottle: bottle, runtime: runtime, graphics: graphics)
+                }
+                return nil
+            }
+        }
+        return try start(arguments: args, name: label, workingDirectory: directory, bottle: bottle, runtime: runtime, graphics: graphics)
     }
 
     /// Launches a Wine built-in tool such as `winecfg`, `regedit` or `taskmgr`.
@@ -52,8 +70,8 @@ final class WineRunner: ObservableObject {
     }
 
     /// Runs Wine and waits for it to exit. Used for wineboot, reg, installers...
-    func runAndWait(_ arguments: [String], name: String, workingDirectory: URL? = nil, in bottle: Bottle, runtime: WineRuntime) async throws -> Int32 {
-        let entry = try start(arguments: arguments, name: name, workingDirectory: workingDirectory, bottle: bottle, runtime: runtime)
+    func runAndWait(_ arguments: [String], name: String, workingDirectory: URL? = nil, in bottle: Bottle, runtime: WineRuntime, graphics: GraphicsBackend? = nil) async throws -> Int32 {
+        let entry = try start(arguments: arguments, name: name, workingDirectory: workingDirectory, bottle: bottle, runtime: runtime, graphics: graphics)
         return await Self.waitForExit(entry.process)
     }
 
@@ -100,14 +118,14 @@ final class WineRunner: ObservableObject {
         if entry.process.isRunning { entry.process.terminate() }
     }
 
-    private func start(arguments: [String], name: String, workingDirectory: URL?, bottle: Bottle, runtime: WineRuntime) throws -> RunningProcess {
+    private func start(arguments: [String], name: String, workingDirectory: URL?, bottle: Bottle, runtime: WineRuntime, graphics: GraphicsBackend? = nil) throws -> RunningProcess {
         guard Paths.rosettaInstalled else {
             throw CrosswayError.message("Rosetta 2 nie jest zainstalowana. Wine dla macOS to aplikacja x86_64 — zainstaluj Rosettę (Ustawienia → Środowiska).")
         }
         let logURL = WineLauncher.newLogURL(bottle: bottle, label: name)
         let process = try WineLauncher.makeProcess(
             bottle: bottle, runtime: runtime, arguments: arguments,
-            workingDirectory: workingDirectory, logURL: logURL
+            workingDirectory: workingDirectory, logURL: logURL, graphics: graphics
         )
         let entry = RunningProcess(bottleID: bottle.id, name: name, logURL: logURL, process: process)
         let entryID = entry.id

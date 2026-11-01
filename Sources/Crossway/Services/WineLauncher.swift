@@ -5,15 +5,17 @@ import Foundation
 enum WineLauncher {
     static let dxvkOverrides = "dxgi,d3d9,d3d10core,d3d11=n,b"
 
-    /// The backend a bottle really uses: `.automatic` and unavailable choices fall back
-    /// to the runtime's best option.
-    static func effectiveBackend(_ settings: BottleSettings, runtime: WineRuntime) -> GraphicsBackend {
+    /// The backend a bottle (or one program in it, via `override`) really uses:
+    /// `.automatic` and unavailable choices fall back to the bottle's, then the runtime's best.
+    static func effectiveBackend(_ settings: BottleSettings, runtime: WineRuntime, override: GraphicsBackend? = nil) -> GraphicsBackend {
         let available = runtime.availableBackends
+        if let override, override != .automatic, available.contains(override) { return override }
         if settings.graphics != .automatic, available.contains(settings.graphics) { return settings.graphics }
         return runtime.preferredBackend
     }
 
-    static func environment(bottle: Bottle, runtime: WineRuntime) -> [String: String] {
+    /// `graphics` overrides the bottle's renderer for this process only (per-program setting).
+    static func environment(bottle: Bottle, runtime: WineRuntime, graphics: GraphicsBackend? = nil) -> [String: String] {
         let s = bottle.settings
         var env = ProcessInfo.processInfo.environment
         // Never leak a prefix or renderer selection from the user's shell into a bottle.
@@ -47,7 +49,7 @@ enum WineLauncher {
 
         // winemenubuilder litters ~/Applications and the Dock with half-working entries.
         var overrides = ["winemenubuilder.exe=d"]
-        switch effectiveBackend(s, runtime: runtime) {
+        switch effectiveBackend(s, runtime: runtime, override: graphics) {
         case .d3dmetal:
             // Sikarugir/CrossOver engines load renderers from WINEDLLPATH_<NAME> as builtins.
             if let renderer = runtime.renderer("d3dmetal") {
@@ -105,12 +107,13 @@ enum WineLauncher {
         runtime: WineRuntime,
         arguments: [String],
         workingDirectory: URL? = nil,
-        logURL: URL
+        logURL: URL,
+        graphics: GraphicsBackend? = nil
     ) throws -> Process {
         let process = Process()
         process.executableURL = runtime.wineBinary
         process.arguments = arguments
-        process.environment = environment(bottle: bottle, runtime: runtime)
+        process.environment = environment(bottle: bottle, runtime: runtime, graphics: graphics)
         // drive_c does not exist until wineboot has run for the first time.
         let fallback = FileManager.default.directoryExists(bottle.driveC) ? bottle.driveC : bottle.url
         process.currentDirectoryURL = workingDirectory.flatMap { FileManager.default.directoryExists($0) ? $0 : nil } ?? fallback

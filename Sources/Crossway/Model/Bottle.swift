@@ -114,8 +114,23 @@ struct PinnedProgram: Codable, Hashable, Identifiable {
     /// Unix path of the .exe / .lnk / .msi / .bat inside (or outside) the bottle.
     var path: String
     var arguments: String = ""
+    /// Renderer for this program only; `.automatic` means "same as the bottle".
+    var graphics: GraphicsBackend = .automatic
 
     var url: URL { URL(fileURLWithPath: path) }
+}
+
+extension PinnedProgram {
+    // Tolerant decoding: bottle files from before per-program graphics have no `graphics` key.
+    // (In an extension, so the memberwise initializer stays available.)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        path = try c.decode(String.self, forKey: .path)
+        arguments = try c.decodeIfPresent(String.self, forKey: .arguments) ?? ""
+        graphics = try c.decodeIfPresent(GraphicsBackend.self, forKey: .graphics) ?? .automatic
+    }
 }
 
 /// A Wine prefix plus Crossway's metadata about it (CrossOver calls these "bottles").
@@ -151,6 +166,14 @@ struct Bottle: Identifiable, Hashable, Codable {
     var isInitialized: Bool { FileManager.default.fileExists(atPath: url.appendingPathComponent("system.reg").path) }
 
     var logsDirectory: URL { Paths.logs.appendingPathComponent(id.uuidString, isDirectory: true) }
+
+    /// The renderer a pinned program asks for instead of the bottle's, if any.
+    func graphicsOverride(for file: URL) -> GraphicsBackend? {
+        let path = file.standardizedFileURL.path
+        guard let program = programs.first(where: { URL(fileURLWithPath: $0.path).standardizedFileURL.path == path }),
+              program.graphics != .automatic else { return nil }
+        return program.graphics
+    }
 
     /// Converts a Windows path (C:\Program Files\...) inside this bottle to a Unix path.
     func unixPath(forWindowsPath windowsPath: String) -> URL {

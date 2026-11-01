@@ -24,13 +24,13 @@ struct ProgramsView: View {
                     section("Przypięte") {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(bottle.programs) { program in
-                                ProgramCard(name: program.name, subtitle: program.arguments.isEmpty ? nil : program.arguments,
+                                ProgramCard(name: program.name, subtitle: subtitle(for: program),
                                             symbol: "star.fill", pinned: true,
                                             missing: !FileManager.default.fileExists(atPath: program.path)) {
                                     launch(program)
                                 } menu: {
                                     Button("Uruchom") { launch(program) }
-                                    Button("Edytuj nazwę i argumenty…") { editing = program }
+                                    Button("Ustawienia programu…") { editing = program }
                                     Button("Dodaj do Launchpada") { makeShortcut(program) }
                                     Button("Pokaż w Finderze") { NSWorkspace.shared.activateFileViewerSelecting([program.url]) }
                                     Divider()
@@ -92,7 +92,11 @@ struct ProgramsView: View {
         }
         .task(id: runner.running(in: bottle).count) { await rescan() }
         .sheet(item: $editing) { program in
-            ProgramEditSheet(program: program) { bottles.updateProgram($0, in: bottle) }
+            ProgramEditSheet(program: program,
+                             backends: runtime?.availableBackends ?? [],
+                             bottleBackend: runtime.map { WineLauncher.effectiveBackend(bottle.settings, runtime: $0) }) {
+                bottles.updateProgram($0, in: bottle)
+            }
         }
         .alert("Błąd", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
@@ -109,6 +113,14 @@ struct ProgramsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)
+    }
+
+    private var runtime: WineRuntime? { try? bottles.runtime(for: bottle) }
+
+    /// Card subtitle: the program's own renderer (if it has one) and its arguments.
+    private func subtitle(for program: PinnedProgram) -> String? {
+        let parts = [program.graphics == .automatic ? "" : program.graphics.shortTitle, program.arguments].filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var filteredShortcuts: [DiscoveredProgram] {
@@ -137,6 +149,7 @@ struct ProgramsView: View {
         } menu: {
             Button("Uruchom") { launch(program) }
             Button("Przypnij") { pin(program) }
+            Button("Ustawienia programu…") { editing = PinnedProgram(name: program.name, path: program.url.path) }
             Button("Dodaj do Launchpada") { makeShortcut(PinnedProgram(name: program.name, path: program.url.path)) }
             Button("Pokaż w Finderze") { NSWorkspace.shared.activateFileViewerSelecting([program.url]) }
         }
@@ -267,6 +280,10 @@ private struct ExecutableRow: View {
 
 struct ProgramEditSheet: View {
     @State var program: PinnedProgram
+    /// Renderers the bottle's runtime offers.
+    var backends: [GraphicsBackend] = []
+    /// What the bottle itself uses, shown on the "same as bottle" choice.
+    var bottleBackend: GraphicsBackend?
     let onSave: (PinnedProgram) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -275,6 +292,18 @@ struct ProgramEditSheet: View {
             Form {
                 TextField("Nazwa", text: $program.name)
                 TextField("Argumenty", text: $program.arguments, prompt: Text("np. -dx11 -windowed"))
+                Picker("Grafika", selection: $program.graphics) {
+                    Text("Jak w butelce" + (bottleBackend.map { " (\($0.shortTitle))" } ?? "")).tag(GraphicsBackend.automatic)
+                    ForEach(backends) { Text($0.title).tag($0) }
+                    if program.graphics != .automatic, !backends.contains(program.graphics) {
+                        Text("\(program.graphics.title) — niedostępne").tag(program.graphics)
+                    }
+                }
+                if program.graphics != .automatic, SteamFix.isSteamGame(program.url) {
+                    Text("Gra ze Steama z własną grafiką startuje prosto ze swojego pliku .exe (Steam włączy się sam, jeśli nie działa). Crossway doda w jej folderze plik steam_appid.txt. Uruchamiaj ją z Crossway albo skrótu w Launchpadzie — przycisk Graj w Steamie użyje grafiki butelki. Jeśli gra potrzebuje argumentów, które zwykle dodaje Steam, wpisz je wyżej.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("Plik") {
                     Text(program.path).font(.caption.monospaced()).lineLimit(2).truncationMode(.middle).textSelection(.enabled)
                 }
@@ -289,6 +318,6 @@ struct ProgramEditSheet: View {
             }
             .padding()
         }
-        .frame(width: 480, height: 260)
+        .frame(width: 520, height: program.graphics != .automatic && SteamFix.isSteamGame(program.url) ? 400 : 310)
     }
 }

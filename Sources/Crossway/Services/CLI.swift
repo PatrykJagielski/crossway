@@ -6,6 +6,7 @@ import Foundation
 ///   bottles                          list bottles
 ///   create <name> [runtime-id]       create a bottle
 ///   run <bottle-name-or-id> <file> [args…]   run a Windows program and wait
+///   graphics <bottle> <file> <backend>      renderer for one program (pins it)
 enum CLI {
     static func handle(_ arguments: [String]) -> Int32? {
         guard arguments.count >= 2, arguments[1] == "--cli" else { return nil }
@@ -83,10 +84,19 @@ enum CLI {
                 let runtime = try bottles.runtime(for: bottle)
                 let path = args[2]
                 // Plain names (cmd, winecfg…) are Wine builtins; anything else is a file.
-                let wineArgs = path.contains("/")
-                    ? WineLauncher.wineArguments(forFile: URL(fileURLWithPath: path), extraArguments: Array(args.dropFirst(3)))
+                let isFile = path.contains("/")
+                let file = URL(fileURLWithPath: path)
+                let wineArgs = isFile
+                    ? WineLauncher.wineArguments(forFile: file, extraArguments: Array(args.dropFirst(3)))
                     : Array(args.dropFirst(2))
-                let code = try await runner.runAndWait(wineArgs, name: URL(fileURLWithPath: path).lastPathComponent, in: bottle, runtime: runtime)
+                let graphics = isFile ? bottle.graphicsOverride(for: file) : nil
+                if graphics != nil, SteamFix.isSteamGame(file) {
+                    SteamFix.keepGameInOwnProcess(file)
+                    await Task.detached { SteamFix.ensureSteamRunning(in: bottle, runtime: runtime) }.value
+                }
+                let code = try await runner.runAndWait(wineArgs, name: file.lastPathComponent,
+                                                       workingDirectory: isFile ? file.deletingLastPathComponent() : nil,
+                                                       in: bottle, runtime: runtime, graphics: graphics)
                 if let log = runner.running.last?.logURL ?? latestLog(bottle) { print("Log: \(log.path)") }
                 return code
             } catch {
@@ -117,6 +127,20 @@ enum CLI {
             await bottles.update(updated, previous: bottle)
             if let error = bottles.lastError { print("Błąd: \(error)"); return 1 }
             print("Zapisano ustawienia butelki \(updated.name)")
+            return 0
+
+        case "graphics":
+            // graphics <butelka> <plik> <automatic|d3dmetal|dxmt|dxvk|wined3d> — renderer for one program
+            guard args.count > 3, let bottle = bottles.bottles.first(where: { $0.name == args[1] || $0.id.uuidString == args[1] }),
+                  let backend = GraphicsBackend(rawValue: args[3]) else {
+                print("Użycie: graphics <butelka> <plik> automatic|d3dmetal|dxmt|dxvk|wined3d"); return 64
+            }
+            let file = URL(fileURLWithPath: args[2]).standardizedFileURL
+            var program = bottle.programs.first { URL(fileURLWithPath: $0.path).standardizedFileURL == file }
+                ?? PinnedProgram(name: file.deletingPathExtension().lastPathComponent, path: file.path)
+            program.graphics = backend
+            bottles.updateProgram(program, in: bottle)
+            print("\(program.name): grafika \(backend.shortTitle)" + (backend == .automatic ? " (jak w butelce)" : ""))
             return 0
 
         case "shortcut":
@@ -152,7 +176,7 @@ enum CLI {
             return await Snapshot.render(to: args.count > 1 ? args[1] : "snapshot.png", view: args.count > 2 ? args[2] : "programs")
 
         default:
-            print("Polecenia: runtimes | download <id> | bottles | create <nazwa> [runtime] | run <butelka> <plik|polecenie> [argumenty]")
+            print("Polecenia: runtimes | download <id> | bottles | create <nazwa> [runtime] | run <butelka> <plik|polecenie> [argumenty] | set | graphics <butelka> <plik> <grafika> | shortcut | kill")
             return 64
         }
     }

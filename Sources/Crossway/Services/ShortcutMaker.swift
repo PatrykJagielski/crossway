@@ -76,8 +76,10 @@ enum CommandLineLauncher {
             return 1
         }
         let original = URL(fileURLWithPath: path)
+        let graphics = bottle.graphicsOverride(for: original)
         // Steam games need the bottle's Steam running (with the webhelper fix) first.
         if SteamFix.isSteamGame(original) {
+            if graphics != nil { SteamFix.keepGameInOwnProcess(original) }
             SteamFix.ensureSteamRunning(in: bottle, runtime: runtime)
         }
         let (url, extraArguments) = SteamFix.prepare(file: original, arguments: extra, in: bottle)
@@ -87,11 +89,12 @@ enum CommandLineLauncher {
                 runtime: runtime,
                 arguments: WineLauncher.wineArguments(forFile: url, extraArguments: WineLauncher.splitArguments(extraArguments)),
                 workingDirectory: url.deletingLastPathComponent(),
-                logURL: WineLauncher.newLogURL(bottle: bottle, label: url.deletingPathExtension().lastPathComponent)
+                logURL: WineLauncher.newLogURL(bottle: bottle, label: url.deletingPathExtension().lastPathComponent),
+                graphics: graphics
             )
             try process.run()
             process.waitUntilExit()
-            if SteamFix.isSteamGame(original) {
+            if SteamFix.isSteamGame(original), graphics == nil {
                 // The game's own exe usually hands off to Steam and exits at once; stay alive
                 // while the real game runs so Steam (Remote Play) or the Dock see it running.
                 SteamFix.waitForGame(named: original.lastPathComponent, in: bottle)
