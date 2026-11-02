@@ -1,7 +1,9 @@
 #!/bin/bash
 # Builds the libraries behind "Pady Xbox przez USB" into Sources/Crossway/Resources/UsbGamepads:
 #   libSDL3.dylib       SDL 3.4.8 (x86_64, for Wine under Rosetta) with libusb support and
-#                       scripts/sdl-xboxone-libusb-macos.patch applied
+#                       scripts/sdl-usb-gamepads-macos.patch applied: wired Xbox pads are
+#                       accepted, noticed when plugged in, and retried when another program
+#                       held them
 #   libusb-1.0.0.dylib  libusb 1.0.29 (x86_64), loaded by SDL from the same folder
 #
 # Why: macOS has no driver for wired third-party Xbox controllers (GIP protocol, e.g. Turtle
@@ -41,7 +43,7 @@ echo "→ libusb $LIBUSB_VERSION (x86_64)…"
 install_name_tool -id @loader_path/libusb-1.0.0.dylib "$WORK/prefix/lib/libusb-1.0.0.dylib" 2>/dev/null
 
 echo "→ SDL $SDL_VERSION z libusb (x86_64)…"
-patch -d "$WORK/SDL3-$SDL_VERSION" -p1 < "$ROOT/scripts/sdl-xboxone-libusb-macos.patch" >/dev/null
+patch -d "$WORK/SDL3-$SDL_VERSION" -p1 < "$ROOT/scripts/sdl-usb-gamepads-macos.patch" >/dev/null
 PKG_CONFIG_PATH="$WORK/prefix/lib/pkgconfig" PKG_CONFIG_LIBDIR="$WORK/prefix/lib/pkgconfig" \
 cmake -S "$WORK/SDL3-$SDL_VERSION" -B "$WORK/build" -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS \
