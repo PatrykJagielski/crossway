@@ -11,7 +11,7 @@ echo "→ Kompilacja (release, arm64)…"
 swift build -c release --arch arm64
 BIN="$(swift build -c release --arch arm64 --show-bin-path)/Crossway"
 
-echo "→ Tworzenie paczki $APP…"
+echo "→ Tworzenie paczki ${APP}…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Crossway"

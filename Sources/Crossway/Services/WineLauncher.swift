@@ -102,7 +102,7 @@ enum WineLauncher {
         }
     }
 
-    /// Creates (but does not start) a Wine process. Output goes to `logURL`.
+    /// Creates (but does not start) a Wine process. Output goes to `logURL`, capped by `LogSink`.
     static func makeProcess(
         bottle: Bottle,
         runtime: WineRuntime,
@@ -121,10 +121,7 @@ enum WineLauncher {
 
         try FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: logURL.path, contents: header(bottle: bottle, runtime: runtime, arguments: arguments, env: process.environment ?? [:]))
-        let handle = try FileHandle(forWritingTo: logURL)
-        handle.seekToEndOfFile()
-        process.standardOutput = handle
-        process.standardError = handle
+        try LogSink.attach(to: process, logURL: logURL)
         process.standardInput = FileHandle.nullDevice
         return process
     }
