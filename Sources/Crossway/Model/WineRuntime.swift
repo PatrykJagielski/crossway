@@ -70,11 +70,51 @@ struct WineRuntime: Identifiable, Hashable, Codable {
         FileManager.default.fileExists(atPath: wineRoot.appendingPathComponent("lib/wine/x86_64-windows/nvngx-on-metalfx.dll").path)
     }
 
-    /// Vulkan (MoltenVK) is required for DXVK. GPTK builds ship without it.
-    var hasVulkan: Bool {
-        let fm = FileManager.default
-        return fm.fileExists(atPath: wineRoot.appendingPathComponent("lib/libMoltenVK.dylib").path)
-            || fm.fileExists(atPath: frameworks?.appendingPathComponent("libMoltenVK.dylib").path ?? "")
+    /// MoltenVK library of this runtime, if it has one. GPTK builds ship without it.
+    var moltenVK: URL? {
+        [wineRoot.appendingPathComponent("lib/libMoltenVK.dylib"), frameworks?.appendingPathComponent("libMoltenVK.dylib")]
+            .compactMap { $0 }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Mesa's KosmicKrisp Vulkan driver (Sikarugir engines). Unlike MoltenVK it runs
+    /// Detroit: Become Human, whose shaders use DrawIndex.
+    var kosmicKrisp: URL? {
+        guard let url = frameworks?.appendingPathComponent("libvulkan_kosmickrisp.dylib"),
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    /// Vulkan is required for DXVK and native Vulkan games.
+    var hasVulkan: Bool { moltenVK != nil || kosmicKrisp != nil }
+
+    /// Driver library actually used for a bottle's choice.
+    func vulkanDriverLibrary(_ choice: VulkanDriver) -> (name: String, library: URL, apiVersion: String)? {
+        let kk = kosmicKrisp.map { (name: "KosmicKrisp", library: $0, apiVersion: "1.3.0") }
+        let mvk = moltenVK.map { (name: "MoltenVK", library: $0, apiVersion: "1.2.0") }
+        switch choice {
+        case .automatic, .kosmicKrisp: return kk ?? mvk
+        case .moltenVK: return mvk ?? kk
+        }
+    }
+
+    /// Driver manifest for the Vulkan loader. Sikarugir engines ship the loader and drivers
+    /// but no manifest, so without it Wine sees no Vulkan GPU at all (vkCreateInstance → -9).
+    /// Written next to Crossway's components; returns nil when the runtime has no Vulkan driver.
+    func vulkanDriverManifest(_ choice: VulkanDriver) -> URL? {
+        guard let driver = vulkanDriverLibrary(choice) else { return nil }
+        let manifest: [String: Any] = [
+            "file_format_version": "1.0.0",
+            "ICD": ["library_path": driver.library.path, "api_version": driver.apiVersion, "is_portability_driver": false],
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]) else { return nil }
+        let safeID = id.components(separatedBy: CharacterSet(charactersIn: "/\\:")).joined(separator: "_")
+        let url = Paths.components.appendingPathComponent("Vulkan/\(safeID)_\(driver.name)_icd.json")
+        if (try? Data(contentsOf: url)) != data {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            guard (try? data.write(to: url, options: .atomic)) != nil else { return nil }
+        }
+        return url
     }
 
     /// Graphics backends this runtime can actually use, best first.

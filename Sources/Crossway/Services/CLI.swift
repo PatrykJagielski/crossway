@@ -106,7 +106,7 @@ enum CLI {
         case "set":
             // set <bottle> graphics=dxvk|automatic windows=win10 retina=on hud=on avx=on sync=esync
             guard args.count > 2, let bottle = bottles.bottles.first(where: { $0.name == args[1] || $0.id.uuidString == args[1] }) else {
-                print("Użycie: set <butelka> graphics=dxvk|automatic windows=win10|win11 retina=on|off hud=on|off avx=on|off sync=none|esync|msync usbpad=on|off")
+                print("Użycie: set <butelka> graphics=dxvk|automatic windows=win10|win11 retina=on|off hud=on|off avx=on|off sync=none|esync|msync vulkan=automatic|kosmicKrisp|moltenVK usbpad=on|off")
                 return 64
             }
             var updated = bottle
@@ -118,6 +118,7 @@ enum CLI {
                 case "graphics": updated.settings.graphics = GraphicsBackend(rawValue: kv[1]) ?? updated.settings.graphics
                 case "windows": updated.settings.windowsVersion = WindowsVersion(rawValue: kv[1]) ?? updated.settings.windowsVersion
                 case "sync": updated.settings.sync = SyncMode(rawValue: kv[1]) ?? updated.settings.sync
+                case "vulkan": updated.settings.vulkanDriver = VulkanDriver(rawValue: kv[1]) ?? updated.settings.vulkanDriver
                 case "retina": updated.settings.retinaMode = on
                 case "hud": updated.settings.metalHUD = on
                 case "avx": updated.settings.advertiseAVX = on

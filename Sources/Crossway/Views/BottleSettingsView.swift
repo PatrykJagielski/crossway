@@ -35,6 +35,13 @@ struct BottleSettingsView: View {
 
                 Section("Grafika") {
                     GraphicsPicker(settings: $draft.settings, runtime: runtime)
+                    if let runtime, runtime.kosmicKrisp != nil, runtime.moltenVK != nil {
+                        Picker("Sterownik Vulkan", selection: $draft.settings.vulkanDriver) {
+                            ForEach(VulkanDriver.allCases) { Text($0.title).tag($0) }
+                        }
+                        Text("Dla gier na Vulkanie (np. Detroit: Become Human) i DXVK. Automatycznie = KosmicKrisp. Gry ze Steama dostają sterownik od Steama — po zmianie zamknij wszystkie programy w butelce.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Toggle("Metal Performance HUD (FPS, czas klatki, GPU)", isOn: $draft.settings.metalHUD)
                     if let runtime, WineLauncher.effectiveBackend(draft.settings, runtime: runtime) == .d3dmetal {
                         Toggle("Ray tracing DirectX (DXR) — M3 i nowsze", isOn: $draft.settings.raytracing)

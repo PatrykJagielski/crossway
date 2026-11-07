@@ -62,6 +62,25 @@ enum SyncMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Vulkan driver for native Vulkan games and DXVK.
+enum VulkanDriver: String, Codable, CaseIterable, Identifiable {
+    /// KosmicKrisp when the runtime has it, otherwise MoltenVK.
+    case automatic
+    /// Mesa's KosmicKrisp: conformant Vulkan on Metal (Sikarugir engines).
+    case kosmicKrisp
+    /// MoltenVK: older, but in every runtime that has Vulkan.
+    case moltenVK
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic: return "Automatycznie"
+        case .kosmicKrisp: return "KosmicKrisp (Mesa)"
+        case .moltenVK: return "MoltenVK"
+        }
+    }
+}
+
 struct EnvironmentVariable: Codable, Hashable, Identifiable {
     var id = UUID()
     var key: String
@@ -71,6 +90,7 @@ struct EnvironmentVariable: Codable, Hashable, Identifiable {
 struct BottleSettings: Codable, Hashable {
     var windowsVersion: WindowsVersion = .win10
     var graphics: GraphicsBackend = .automatic
+    var vulkanDriver: VulkanDriver = .automatic
     var sync: SyncMode = .esync
     var metalHUD = false
     var advertiseAVX = true
@@ -94,6 +114,7 @@ struct BottleSettings: Codable, Hashable {
         let d = BottleSettings()
         windowsVersion = try c.decodeIfPresent(WindowsVersion.self, forKey: .windowsVersion) ?? d.windowsVersion
         graphics = try c.decodeIfPresent(GraphicsBackend.self, forKey: .graphics) ?? d.graphics
+        vulkanDriver = try c.decodeIfPresent(VulkanDriver.self, forKey: .vulkanDriver) ?? d.vulkanDriver
         sync = try c.decodeIfPresent(SyncMode.self, forKey: .sync) ?? d.sync
         metalHUD = try c.decodeIfPresent(Bool.self, forKey: .metalHUD) ?? d.metalHUD
         advertiseAVX = try c.decodeIfPresent(Bool.self, forKey: .advertiseAVX) ?? d.advertiseAVX

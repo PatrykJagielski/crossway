@@ -18,6 +18,7 @@ scripts/build-app.sh --install  # dodatkowo kopiuje do /Applications
 | **Środowisko Wine** | silnik CrossOver | Zalecane: *Wine 10 CrossOver* (silnik Sikarugir + biblioteki i renderery z Sikarugir Template: D3DMetal 4, DXMT, DXVK). Dodatkowo: *Game Porting Toolkit 3* (Wine 7.7 + D3DMetal 3), *Wine Staging/Devel 11.x* (Gcenx). Wykrywa też WhiskyWine i aplikacje Wine w `/Applications`. |
 | **Butelka** | bottle | Osobny `WINEPREFIX` w `~/Library/Application Support/Crossway/Bottles/<uuid>` + `crossway-bottle.json`. |
 | **Grafika** | D3DMetal / DXMT / DXVK | Wybór w ustawieniach butelki: D3DMetal (DX11/12 → Metal), DXMT (DX10/11 → Metal), DXVK (DX9–11 → Vulkan → MoltenVK) lub WineD3D. Na silniku Sikarugir renderery ładowane są przez `WINEDLLPATH_*`, jak w CrossOver. |
+| **Vulkan** | MoltenVK | Gry na Vulkanie i DXVK: Crossway zapisuje manifest sterownika w `Components/Vulkan/` i ustawia `VK_DRIVER_FILES`. Na Wine 10 CrossOver domyślnie KosmicKrisp (Mesa) — MoltenVK nie radzi sobie np. z Detroit: Become Human (`DrawIndex`); do zmiany w ustawieniach butelki. |
 | **CrossTie** | instalatory | Katalog: Steam, Epic, GOG Galaxy, Battle.net, EA app, Ubisoft Connect, Rockstar + pakiety winetricks. |
 | **Skróty** | ikony w Launchpadzie | `~/Applications/Crossway/<Gra>.app` uruchamiające `Crossway --launch <butelka> <exe>`. |
 

@@ -21,10 +21,15 @@ enum WineLauncher {
         // Never leak a prefix or renderer selection from the user's shell into a bottle.
         for key in ["WINEPREFIX", "WINEARCH", "WINEDLLOVERRIDES", "WINESERVER", "WINELOADER", "WINEDEBUG",
                     "WINEDLLPATH_D3DMETAL", "WINEDLLPATH_DXMT", "WINEDLLPATH_DXVK", "CX_APPLEGPTK_LIBD3DSHARED_PATH",
-                    "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH"] {
+                    "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH", "VK_DRIVER_FILES", "VK_ICD_FILENAMES"] {
             env.removeValue(forKey: key)
         }
         env.merge(runtime.baseEnvironment) { _, new in new }
+        // Native Vulkan games (and DXVK) need the loader to find MoltenVK.
+        if let manifest = runtime.vulkanDriverManifest(s.vulkanDriver) {
+            env["VK_DRIVER_FILES"] = manifest.path
+            env["VK_ICD_FILENAMES"] = manifest.path // loaders older than 1.3.207
+        }
         if s.usbGamepads { UsbGamepads.apply(to: &env, runtime: runtime) }
 
         env["WINEPREFIX"] = bottle.url.path
@@ -135,7 +140,7 @@ enum WineLauncher {
 
     private static func header(bottle: Bottle, runtime: WineRuntime, arguments: [String], env: [String: String]) -> Data {
         let interesting = env.filter { key, _ in
-            key.hasPrefix("WINE") || key.hasPrefix("DXVK") || key.hasPrefix("SDL_") || key.hasPrefix("D3DM") || key.hasPrefix("MTL") || key.hasPrefix("ROSETTA")
+            key.hasPrefix("WINE") || key.hasPrefix("DXVK") || key.hasPrefix("SDL_") || key.hasPrefix("D3DM") || key.hasPrefix("MTL") || key.hasPrefix("ROSETTA") || key.hasPrefix("VK_")
         }
         var text = "Crossway — \(Date())\n"
         text += "Butelka: \(bottle.name) (\(bottle.url.path))\n"
